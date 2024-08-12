@@ -84,14 +84,47 @@ I believe I took the right approaches for ensuring consistency under concurrent 
 I just threw the db bootstrapping into an sql file, and just create a fresh DB every time I need to test the service.
 this wouldn't fly in prod - and we'd need to use a DB migration tool of some sort
 
-## DB design
+## DB - data model 
 I'll just copy the sql code for bootstrapping the DB here (the sql bootstrapping files are localed in the DB folder)
 
+```sql 
+CREATE DATABASE transactions_db;
+
+\connect transactions_db transaction_svc
+
+CREATE TABLE IF NOT EXISTS users (
+  id CHAR(20) PRIMARY KEY,   
+  username CHAR(20) ,   
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id CHAR(20) PRIMARY KEY,   
+  user_id CHAR(20) ,   
+	balance DECIMAL(15, 2) DEFAULT 0.00,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+  id CHAR(20) PRIMARY KEY,   
+	to_account CHAR(20),
+	from_account CHAR(20),
+	amount DECIMAL(15, 2) NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	idempotency_key TEXT UNIQUE,
+	state TEXT
+);
+
+```
 ## Features
 
 ### Idempotency
-To support full idempotency - the client needs to provide an idempotency key when they submit a transaction. 
-This key is checked against any existing transactions in the DB to ensure there are no accidental double transfers
+To support full idempotency - the client needs to generate and provide an idempotency key to the API. 
+This key is written to the transaction table when the transaction is run. 
+
+The transaction table has the column for this key set as unique - so any subsequent transactions that are started with the same idempotency key will fail due to the uniqueness constraint. 
+
+Also - any concurrent transactions (with the same idempotency key) that are triggered while the original transaction is in flight - will be blocked until the first transaction either commits or rolls back. This ensures even in the concurrent case, at most one of these transactions will succeed. 
 
 
 
