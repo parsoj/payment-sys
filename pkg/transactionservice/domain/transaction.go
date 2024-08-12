@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -66,9 +65,7 @@ func (svc *TransactionService) TransferFunds(ctx context.Context, toAccount, fro
 		return "", fmt.Errorf("Failed to create Transaction row: %w", err)
 	}
 
-	tx, err := svc.db.Begin(ctx, &sql.TxOptions{
-		Isolation: sql.LevelRepeatableRead, // need to prevent account balances from updating until the txn finishes
-	})
+	tx, err := svc.db.Begin(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("Failed to open DB transaction: %w", err)
 	}
@@ -76,69 +73,71 @@ func (svc *TransactionService) TransferFunds(ctx context.Context, toAccount, fro
 
 	//********************************************************************************
 	//fetch & check account balances
-	var check_wg sync.WaitGroup
-	check_wg.Add(2) // We are waiting for 2 goroutines
+	var balances map[string]float64
+	var queryErr error
 
-	var toBalance, fromBalance float64
-	var toErr, fromErr error
+	// Define the query to fetch balances for both accounts in a single query
+	query := `
+    SELECT id, balance 
+    FROM accounts 
+    WHERE id IN ($1, $2);
+  `
 
-	// Fetch balance for accountID1
-	go func() {
-		defer check_wg.Done() // Mark this goroutine as done when it returns
-		toBalance, toErr = svc.fetchAccountBalance(tx, toAccount)
-	}()
+	rows, queryErr := tx.Query(query, fromAccount, toAccount)
+	if queryErr != nil {
+		return txn_id, fmt.Errorf("Failed to execute balance query: %w", queryErr)
+	}
+	defer rows.Close()
 
-	// Fetch balance for accountID2
-	go func() {
-		defer check_wg.Done() // Mark this goroutine as done when it returns
-		fromBalance, fromErr = svc.fetchAccountBalance(tx, fromAccount)
-	}()
+	balances = make(map[string]float64)
 
-	check_wg.Wait()
-
-	if toErr != nil {
-		return txn_id, fmt.Errorf("Failed to fetch balance for account '%s': %w", toAccount, toErr)
+	for rows.Next() {
+		var accountID string
+		var balance float64
+		if err := rows.Scan(&accountID, &balance); err != nil {
+			return txn_id, fmt.Errorf("Failed to scan row: %w", err)
+		}
+		balances[accountID] = balance
 	}
 
-	if fromErr != nil {
-		return txn_id, fmt.Errorf("Failed to fetch balance for account '%s': %w", fromAccount, fromErr)
+	// Check for any errors encountered during iteration
+	if err := rows.Err(); err != nil {
+		return txn_id, fmt.Errorf("Error iterating over rows: %w", err)
+	}
+
+	toBalance, toFound := balances[toAccount]
+	fromBalance, fromFound := balances[fromAccount]
+
+	if !toFound {
+		return txn_id, fmt.Errorf("Failed to fetch balance for account '%s'", toAccount)
+	}
+
+	if !fromFound {
+		return txn_id, fmt.Errorf("Failed to fetch balance for account '%s'", fromAccount)
 	}
 
 	if amount > fromBalance {
 		return txn_id, fmt.Errorf("Insufficient funds in source account. Balance: %f -- Transfer Amount: %f", fromBalance, amount)
 	}
-
 	//********************************************************************************
 	// perform the transfer
 
 	fromNewBalance := fromBalance - amount
 	toNewBalance := toBalance + amount
 
-	var tnsfr_wg sync.WaitGroup
-	tnsfr_wg.Add(2)
+	updateQuery := `
+    UPDATE accounts
+    SET balance = CASE 
+        WHEN id = $1 THEN $2::numeric
+        WHEN id = $3 THEN $4::numeric
+    END
+    WHERE id IN ($1, $3);
+`
 
-	// Set balance for account1
-	go func() {
-		defer tnsfr_wg.Done()
-		fromErr = svc.setBalance(tx, fromAccount, fromNewBalance)
-	}()
-
-	// Set balance for account2
-	go func() {
-		defer tnsfr_wg.Done()
-		toErr = svc.setBalance(tx, toAccount, toNewBalance)
-	}()
-
-	tnsfr_wg.Wait()
-
-	if toErr != nil {
-		return txn_id, fmt.Errorf("Failed to update balance for account: %w", toErr)
+	_, updateErr := tx.Exec(updateQuery, fromAccount, fromNewBalance, toAccount, toNewBalance)
+	if updateErr != nil {
+		return txn_id, fmt.Errorf("Failed to update balances for accounts: %w", updateErr)
 	}
-
-	if fromErr != nil {
-		return txn_id, fmt.Errorf("Failed to update balance for account: %w", fromErr)
-	}
-
 	//********************************************************************************
 	// mark transaction as completed
 
