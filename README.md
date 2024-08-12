@@ -84,6 +84,59 @@ I believe I took the right approaches for ensuring consistency under concurrent 
 I just threw the db bootstrapping into an sql file, and just create a fresh DB every time I need to test the service.
 this wouldn't fly in prod - and we'd need to use a DB migration tool of some sort
 
+## Supported API endpoints
+Also - check out tests/apt_test.hurl for some example api calls
+### Create User
+`POST /create-user`
+```json
+{
+  "username": "example_username"
+}
+```
+### Get User
+`GET /get-user?user_id=example_user_id`
+
+### Create Account
+`POST /create-account`
+```json
+{
+  "user_id": "example_user_id"
+}
+```
+### Get Account
+`GET /get-account?account_id=example_account_id`
+
+### Deposit Funds
+`POST /deposit-funds`
+```json
+{
+  "account_id": "example_account_id",
+  "amount": 100.0,
+  "idempotency_key": "example_idempotency_key"
+}
+```
+### Withdraw Funds
+`POST /withdraw-funds`
+```json
+{
+  "account_id": "example_account_id",
+  "amount": 100.0,
+  "idempotency_key": "example_idempotency_key"
+}
+```
+### Transfer Funds
+`POST /transfer-funds`
+```json
+{
+  "to_account": "example_to_account",
+  "from_account": "example_from_account",
+  "amount": 100.0,
+  "idempotency_key": "example_idempotency_key"
+}
+```
+### Get Transaction
+`GET /get-transaction?transaction_id=example_transaction_id`
+
 ## DB - data model 
 I'll just copy the sql code for bootstrapping the DB here (the sql bootstrapping files are localed in the DB folder)
 primary keys are fixed-length to 20 chars - to be as efficient as possible while using the id generated code discussed above
