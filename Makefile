@@ -1,6 +1,25 @@
 PG_USER = transaction_svc
 PG_PASS = dev_pass # in production - we'd use secrets management for this
 
+
+################################################################################
+# Run the Service and DB containers
+
+bootstrap-all: build-svc clean-db bootstrap-db clean-svc run-dev-svc
+
+
+################################################################################
+# Running Tests
+
+# Requires the service containers to be running locally
+test-api: 
+	hurl --very-verbose ./tests/api_test.hurl
+
+
+test-unit: 
+	go test -v ./...
+
+
 ################################################################################
 # Database
 
@@ -41,6 +60,3 @@ run-dev-svc:
 	docker run --network ${NETWORK_NAME} -p 8080:8080 --name $(SVC_IMAGE_NAME)_container $(SVC_IMAGE_NAME)
 
 
-################################################################################
-
-bootstrap-all: build-svc clean-db bootstrap-db clean-svc run-dev-svc
