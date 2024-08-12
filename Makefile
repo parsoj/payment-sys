@@ -1,7 +1,3 @@
-PG_USER = transaction_svc
-PG_PASS = dev_pass # in production - we'd use secrets management for this
-
-
 ################################################################################
 # Run the Service and DB containers
 
@@ -29,6 +25,9 @@ test-unit:
 
 DB_IMAGE_NAME := txn_db
 NETWORK_NAME := my_network
+
+PG_USER = transaction_svc
+PG_PASS = dev_pass # in production - we'd use secrets management for this
 
 # remove any containers for the postgres db
 clean-db:
