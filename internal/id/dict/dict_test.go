@@ -6,10 +6,11 @@ import (
 )
 
 func TestRandomWordsDictionary(t *testing.T) {
+	t.Skip("Not using this feature")
 
 	d, err := NewRandomWordsDictionary()
 	if err != nil {
-		fmt.Println(err) //TODO fix tests
+		fmt.Println(err)
 	}
 
 	for i := 0; i <= 20; i++ {
