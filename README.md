@@ -1,13 +1,3 @@
-# TODOs 
-
-- check transaction setup for Deposit and WithDrawl
-  - check to/from fields
-  - need repeatableread isolation? 
-
-
-- check transaction setup for Transfer 
-  - should txn row be created outside of db transaction
-
 # How to run
 ## Prerequisites
 To run the service, you should just need Make and Docker installed
@@ -35,18 +25,35 @@ See the Makefile for the test functions available
 
 ## What I left out
 
-- Human-readable IDs 
+### Human-readable component to IDs 
+I originally implemented this, where the least-significant characters of the string were actually
+picked from a dictionary of words (and the remaining characters that weren't the timestamp were random)
+so it looked like "23JcebKwFMuUKNA-dogs" 
+components of:
+"23JcebKwFMu" - timestamp
+"UKNA" - random filler
+"-dogs" - human readable word with separator
+
+I removed this feature, in part because I needed a separator to distinguish the word from the rest of the id, and I was using a special character to do that (which I wanted to avoid). Also - the number of random characters was pretty small, depending on the length of the readable word (sometimes only 2 or 1 character) - which made me concerned about guess-ability of the id
+
+Also - in a prod system - making a choice to defer a feature like that actually wouldn't necessarily "lock you in" to an identifier schema that wasn't human readable. As long as the "most significant" characters remained the same style of timestamp - you could continue to tweak how the lower-order characters are generated, without affecting the ordering between the new and old ids
 
 ## components of id string
+- "most significant" 11 characters: 
+  - Unix Nanosecond timestamp (base 62 encoded) 
 
-- TODO id components "diagram"
+- remaining characters are random
 
 ## Design Choices
+I chose the Nanosecond timestamp, because in my testing there were too many conflicts with millisecond
+that does have the disadvantage of consuming more characters, but minimizing ids with identical timestamps seems worth it. 
 
-- TODO explain choices for timestamp portion
+I chose base 62 encoding, since that utilizes all alphanumeric characters 
+(including upper and lower case alphabetic characters) - which allows us to minimize the length of the timestamp as much as possible. 
 
-- TODO explain remainder of string, and why you didn't choose human-readable
+Although base64 is quite common, it adds the "+" and "/" characters, and there isn't really a consistent standard for how to lex-sort special characters and/or base64
 
+by making the remaining characters random (or random with a dictionary word on the end) - that can function to tie-break the occasional case where two ids have identical timestamps. That way, two IDs created at or close to the exact same nanosecond will still have a strict ordering and one will be first in lex order
 
 # Part 2 - Transaction Service
 
@@ -85,10 +92,6 @@ I'll just copy the sql code for bootstrapping the DB here (the sql bootstrapping
 ### Idempotency
 To support full idempotency - the client needs to provide an idempotency key when they submit a transaction. 
 This key is checked against any existing transactions in the DB to ensure there are no accidental double transfers
-
-
-### Concurrency
-- TODO 
 
 
 
