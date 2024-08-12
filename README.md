@@ -86,6 +86,7 @@ this wouldn't fly in prod - and we'd need to use a DB migration tool of some sor
 
 ## DB - data model 
 I'll just copy the sql code for bootstrapping the DB here (the sql bootstrapping files are localed in the DB folder)
+primary keys are fixed-length to 20 chars - to be as efficient as possible while using the id generated code discussed above
 
 ```sql 
 CREATE DATABASE transactions_db;
